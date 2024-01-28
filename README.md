@@ -1,3 +1,6 @@
+### This is a learning repo for the course advanced dbt.
+
+
 # Welcome to the Bingeflix Data Team
 
 ### Coding Conventions
