@@ -1,0 +1,18 @@
+models:
+  - name: rolling_aggregation_n_days
+    description: A macro to calculate aggregation for a rolling days.
+    arguments:
+      - name: column_name
+        description: The target value field, that will be aggregated in the rolling calculation.
+
+      - name: partition_by
+        description: The entity, that the calculation should be groupped by.
+
+      - name: number_of_days
+        description: Rolling period for the calculation, the number indicates the amount of days. 7 as default.
+
+      - name: aggregation_method
+        description: Aggregation method for the rolling calculation. avg as default.
+
+      - name: order_by
+        description: Sorted order for calculation. created_at as default.

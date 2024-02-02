@@ -1,0 +1,6 @@
+models:
+  - name: trunc_to_month
+    description: A macro to truncate date into month.
+    arguments:
+      - name: date_time
+        description: A date column that needs to be truncated into month.
