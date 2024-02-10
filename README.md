@@ -16,6 +16,9 @@
 - Columns that should never be null must have a not_null schema test.
 - Columns that should be unique must have a unique schema test.
 
+#### staging models
+- If a staging model does only simple cleaning for the source, and no joins are involved, there is no need to set the same tests for the same columns as the source.
+
 #### Models
 - The primary key column must have not_null and unique schema tests.
 - All boolean columns must have an accepted_values schema test. The accepted values are true and false.
