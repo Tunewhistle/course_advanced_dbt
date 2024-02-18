@@ -4,27 +4,6 @@
 -- This model is created following the dbt MRR playbook: https://www.getdbt.com/blog/modeling-subscription-revenue/
 
 WITH
-
--- Import CTEs
--- Get raw monthly subscriptions
-monthly_subscriptions AS (
-    SELECT
-        subscription_id,
-        user_id,
-        starts_at,
-        ends_at,
-        plan_name,
-        pricing,
-        {{ trunc_to_month('starts_at') }} AS start_month,
-        {{ trunc_to_month('ends_at') }} AS end_month
-       -- DATE(DATE_TRUNC('month', starts_at)) AS start_month,
-       --DATE(DATE_TRUNC('month', ends_at)) AS end_month
-    FROM
-        {{ unit_testing_select_table(ref('dim_subscriptions'), ref('unit_test_input_dim_subscriptions')) }}
-    WHERE
-        billing_period = 'monthly'
-),
-
 -- Use the dates spine to generate a list of months
 months AS (
     SELECT
@@ -35,28 +14,7 @@ months AS (
         day_of_month = 1
 ),
 
--- Logic CTEs
--- Create subscription period start_month and end_month ranges
-subscription_periods AS (
-    SELECT
-        subscription_id,
-        user_id,
-        plan_name,
-        pricing AS monthly_amount,
-        starts_at,
-        ends_at,
-        start_month,
 
-        -- For users that cancel in the first month, set their end_month to next month because the subscription remains active until the end of the first month
-        -- For users who haven't ended their subscription yet (end_month is NULL) set the end_month to one month from the current date (these rows will be removed from the final CTE)
-        CASE
-            WHEN start_month = end_month THEN DATEADD('month', 1, end_month)
-            WHEN end_month IS NULL THEN DATE(DATEADD('month', 1, {{ trunc_to_month('CURRENT_DATE') }}))
-            ELSE end_month
-        END AS end_month
-    FROM
-        monthly_subscriptions
-),
 
 -- Determine when given subscription plan's first and most recent months
 subscribers AS (
@@ -66,7 +24,7 @@ subscribers AS (
         MIN(start_month) AS first_start_month,
         MAX(end_month) AS last_end_month
     FROM
-        subscription_periods
+        {{ ref('int_subscription_periods') }}
     GROUP BY
         1, 2
 ),
@@ -92,17 +50,17 @@ mrr_base AS (
         subscriber_months.date_month,
         subscriber_months.user_id,
         subscriber_months.subscription_id,
-        COALESCE(subscription_periods.monthly_amount, 0.0) AS mrr
+        COALESCE(int_subscription_periods.monthly_amount, 0.0) AS mrr
     FROM
         subscriber_months
-        LEFT JOIN subscription_periods
-            ON subscriber_months.user_id = subscription_periods.user_id
-                AND subscriber_months.subscription_id = subscription_periods.subscription_id
+        LEFT JOIN {{ ref('int_subscription_periods') }}
+            ON subscriber_months.user_id = int_subscription_periods.user_id
+                AND subscriber_months.subscription_id = int_subscription_periods.subscription_id
                 -- The month is on or after the subscription start date...
-                AND subscriber_months.date_month >= subscription_periods.start_month
+                AND subscriber_months.date_month >= int_subscription_periods.start_month
                 -- and the month is before the subscription end date (and handle NULL case)
-                AND (subscriber_months.date_month < subscription_periods.end_month
-                    OR subscription_periods.end_month IS NULL)
+                AND (subscriber_months.date_month < int_subscription_periods.end_month
+                    OR int_subscription_periods.end_month IS NULL)
 ),
 
 -- Calculate subscriber level MRR (monthly recurring revenue)
@@ -174,9 +132,9 @@ final AS (
         mrr_with_changes.date_month,
         mrr_with_changes.user_id,
         mrr_with_changes.subscription_id,
-        subscription_periods.starts_at,
-        subscription_periods.ends_at,
-        subscription_periods.plan_name,
+        int_subscription_periods.starts_at,
+        int_subscription_periods.ends_at,
+        int_subscription_periods.plan_name,
         mrr AS mrr_amount,
         mrr_change,
         LEAST(mrr, previous_month_mrr_amount) AS retained_mrr_amount,
@@ -199,9 +157,9 @@ final AS (
 
     FROM
         mrr_with_changes
-        LEFT JOIN subscription_periods
-            ON mrr_with_changes.user_id = subscription_periods.user_id
-                AND mrr_with_changes.subscription_id = subscription_periods.subscription_id
+        LEFT JOIN {{ ref('int_subscription_periods') }}
+            ON mrr_with_changes.user_id = int_subscription_periods.user_id
+                AND mrr_with_changes.subscription_id = int_subscription_periods.subscription_id
     WHERE
         date_month <= {{ trunc_to_month('CURRENT_DATE') }}
 )
